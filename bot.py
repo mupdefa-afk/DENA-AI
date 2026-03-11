@@ -1,82 +1,83 @@
 import requests
+import pandas as pd
+import ta
 import schedule
 import time
-import pandas as pd
-import ccxt
-import ta
 
-TOKEN = "TU_TOKEN"
-CHAT_ID = "-1003524657786"
+TOKEN = "8544210127:AAGefu7tMGkhVH6-z4YA4v0JN9DcATtTs5Jo"
+CHAT_ID = "-1002148392748"
 
-exchange = ccxt.binance()
+symbol = "bitcoin"
 
-def get_data():
+def obtener_precio():
 
-    bars = exchange.fetch_ohlcv("BTC/USDT","1m",limit=100)
+    url = f"https://api.coingecko.com/api/v3/coins/{symbol}/market_chart?vs_currency=usd&days=1"
 
-    df = pd.DataFrame(
-        bars,
-        columns=["time","open","high","low","close","volume"]
-    )
+    data = requests.get(url).json()
+
+    precios = [p[1] for p in data["prices"]]
+
+    df = pd.DataFrame(precios, columns=["close"])
 
     return df
 
 
-def indicators(df):
+def analizar():
 
-    df["rsi"] = ta.momentum.RSIIndicator(df["close"]).rsi()
+    df = obtener_precio()
 
-    macd = ta.trend.MACD(df["close"])
-    df["macd"] = macd.macd()
-    df["macd_signal"] = macd.macd_signal()
+    df["ema9"] = ta.trend.ema_indicator(df["close"], window=9)
+    df["ema21"] = ta.trend.ema_indicator(df["close"], window=21)
 
-    df["ema20"] = ta.trend.EMAIndicator(df["close"],window=20).ema_indicator()
-    df["ema50"] = ta.trend.EMAIndicator(df["close"],window=50).ema_indicator()
+    df["rsi"] = ta.momentum.rsi(df["close"], window=14)
 
-    return df
+    ema9 = df["ema9"].iloc[-1]
+    ema21 = df["ema21"].iloc[-1]
+    rsi = df["rsi"].iloc[-1]
 
+    señal = "SIN SEÑAL"
 
-def strategy(df):
+    if ema9 > ema21 and rsi > 55:
+        señal = "🟢 CALL"
 
-    last = df.iloc[-1]
+    elif ema9 < ema21 and rsi < 45:
+        señal = "🔴 PUT"
 
-    if last["rsi"] < 30 and last["macd"] > last["macd_signal"]:
-        return "BUY"
-
-    if last["rsi"] > 70 and last["macd"] < last["macd_signal"]:
-        return "SELL"
-
-    return None
+    return señal, rsi
 
 
-def send_signal():
+def enviar_telegram(texto):
 
-    df = get_data()
-    df = indicators(df)
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
-    signal = strategy(df)
+    data = {
+        "chat_id": CHAT_ID,
+        "text": texto
+    }
 
-    if signal:
+    requests.post(url, data=data)
 
-        message = f"""
-🚨 DENA SIGNAL
 
-Asset: BTC/USDT
-Signal: {signal}
-Timeframe: 1m
+def ejecutar():
+
+    señal, rsi = analizar()
+
+    mensaje = f"""
+🤖 DENA PRO SIGNAL
+
+Activo: BTC
+Temporalidad: 1M
+
+Señal: {señal}
+RSI: {round(rsi,2)}
+
+Plataforma: EXNOVA
 """
 
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
-        data = {
-            "chat_id": CHAT_ID,
-            "text": message
-        }
-
-        requests.post(url,data=data)
+    enviar_telegram(mensaje)
 
 
-schedule.every(1).minutes.do(send_signal)
+schedule.every(1).minutes.do(ejecutar)
 
 while True:
     schedule.run_pending()
