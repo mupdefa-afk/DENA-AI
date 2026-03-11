@@ -1,5 +1,6 @@
+python-telegram-bot
 requests
-schedule
 pandas
 numpy
 ta
+schedule
