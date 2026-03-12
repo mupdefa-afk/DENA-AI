@@ -1,6 +1,4 @@
-flask
-requests
+ccxt
 pandas
-numpy
-ta
-schedule
+requests
+flask
