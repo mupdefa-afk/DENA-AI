@@ -1,1 +1,1 @@
-worker: python dena_bot.py
+web: python bot.py
