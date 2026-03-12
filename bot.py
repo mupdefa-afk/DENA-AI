@@ -13,6 +13,7 @@ exchange = ccxt.kraken()
 
 app = Flask(__name__)
 
+enviar("DENA BOT ACTIVADO 🚀")
 symbols = [
 "BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT",
 "ADA/USDT","DOGE/USDT","AVAX/USDT","DOT/USDT","MATIC/USDT",
