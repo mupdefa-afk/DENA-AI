@@ -3,7 +3,17 @@ import pandas as pd
 import ta
 import schedule
 import time
+from flask import Flask
+import threading
 
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "DENA AI funcionando"
+
+def run_web():
+    app.run(host="0.0.0.0", port=10000)
 TOKEN = "8544210127:AAGefu7tMGkhVH6-z4YA4v0JN9DcATtTs5Jo"
 CHAT_ID = "-1002148392748"
 
@@ -79,6 +89,9 @@ Plataforma: EXNOVA
 
 schedule.every(1).minutes.do(ejecutar)
 
+threading.Thread(target=run_web).start()
+
 while True:
     schedule.run_pending()
+    time.sleep(1)
     time.sleep(1)
