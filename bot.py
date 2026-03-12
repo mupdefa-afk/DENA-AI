@@ -6,7 +6,7 @@ import threading
 from flask import Flask
 from datetime import datetime
 
-TOKEN = "8544210127:AAGefu7tMGkhVH6-z4YA4v0JN9DcATtTs5Jo"
+TOKEN = "8544210127:AAEBmSGLnSutz5bMzz7Hij-R00GhVAEWkZ0"
 CHAT_ID = "-1003524657786"
 
 exchange = ccxt.kraken()
