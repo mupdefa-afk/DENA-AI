@@ -6,31 +6,28 @@ import threading
 from flask import Flask
 from datetime import datetime
 
+# =========================
+# CONFIGURACION TELEGRAM
+# =========================
+
 TOKEN = "8544210127:AAEBmSGLnSutz5bMzz7Hij-R00GhVAEWkZ0"
 CHAT_ID = "-1003524657786"
 
-exchange = ccxt.kraken()
+# =========================
+# CONEXION EXCHANGE
+# =========================
+
+exchange = ccxt.binance()
+
+# =========================
+# FLASK SERVER
+# =========================
 
 app = Flask(__name__)
 
-symbols = [
-"EUR/USD",
-"GBP/USD",
-"USD/JPY",
-"AUD/USD",
-"USD/CAD",
-"EUR/JPY",
-"EUR/GBP",
-"USD/CHF",
-"NZD/USD"
-]
-
-registro = []
-
-max_senales_hora = 5
-contador_senales = 0
-hora_actual = datetime.now().hour
-
+# =========================
+# ENVIAR MENSAJE TELEGRAM
+# =========================
 
 def enviar(msg):
 
@@ -41,8 +38,14 @@ def enviar(msg):
         "text": msg
     }
 
-    requests.post(url, data=data)
+    try:
+        requests.post(url, data=data)
+    except:
+        print("Error enviando mensaje")
 
+# =========================
+# RSI
+# =========================
 
 def rsi(df, periodo=14):
 
@@ -60,6 +63,9 @@ def rsi(df, periodo=14):
 
     return rsi
 
+# =========================
+# MACD
+# =========================
 
 def macd(df):
 
@@ -71,219 +77,124 @@ def macd(df):
 
     return macd, signal
 
+# =========================
+# DETECTAR ACTIVOS
+# =========================
 
-def tendencia(df):
+def obtener_activos():
 
-    ema50 = df["close"].ewm(span=50).mean()
-    ema200 = df["close"].ewm(span=200).mean()
+    try:
 
-    if ema50.iloc[-1] > ema200.iloc[-1]:
-        return "CALL"
+        mercados = exchange.load_markets()
 
-    return "PUT"
+        activos = []
 
+        for symbol in mercados:
 
-def soporte_resistencia(df):
+            if "USDT" in symbol and "/" in symbol:
 
-    soporte = df["low"].rolling(20).min().iloc[-1]
-    resistencia = df["high"].rolling(20).max().iloc[-1]
+                activos.append(symbol)
 
-    return soporte, resistencia
+        return activos[:20]
 
+    except:
 
-def volumen_fuerte(df):
+        return []
 
-    vol_actual = df["volume"].iloc[-1]
-    vol_media = df["volume"].rolling(20).mean().iloc[-1]
-
-    return vol_actual > vol_media * 1.5
-
-
-def mercado_lateral(df):
-
-    rango = df["high"].max() - df["low"].min()
-
-    if rango < df["close"].mean() * 0.002:
-        return True
-
-    return False
-
-
-def probabilidad(rsi_v, macd_v, signal_v, vol_ok):
-
-    score = 0
-
-    if rsi_v < 30 or rsi_v > 70:
-        score += 20
-
-    if macd_v > signal_v:
-        score += 20
-
-    if vol_ok:
-        score += 20
-
-    score += 40
-
-    return score
-
+# =========================
+# ANALISIS
+# =========================
 
 def analizar(symbol):
 
-    timeframes = ["1m","5m","15m"]
+    try:
 
-    tendencias = []
+        ohlcv = exchange.fetch_ohlcv(symbol, "1m", limit=100)
 
-    for tf in timeframes:
-
-        try:
-            data = exchange.fetch_ohlcv(symbol, tf, limit=200)
-        except:
-            return None
-
-        df = pd.DataFrame(data, columns=["time","open","high","low","close","volume"])
+        df = pd.DataFrame(
+            ohlcv,
+            columns=["time","open","high","low","close","volume"]
+        )
 
         df["RSI"] = rsi(df)
 
         macd_val, signal_val = macd(df)
 
-        tend = tendencia(df)
+        rsi_actual = df["RSI"].iloc[-1]
 
-        tendencias.append(tend)
+        macd_actual = macd_val.iloc[-1]
+        signal_actual = signal_val.iloc[-1]
 
-    call = tendencias.count("CALL")
-    put = tendencias.count("PUT")
+        if rsi_actual < 30 and macd_actual > signal_actual:
 
-    if call >= 2:
-        direccion = "CALL 🟢"
+            return "CALL 🟢"
 
-    elif put >= 2:
-        direccion = "PUT 🔴"
+        if rsi_actual > 70 and macd_actual < signal_actual:
 
-    else:
+            return "PUT 🔴"
+
+    except:
+
         return None
 
-    data = exchange.fetch_ohlcv(symbol,"1m",limit=200)
+    return None
 
-    df = pd.DataFrame(data, columns=["time","open","high","low","close","volume"])
-
-    df["RSI"] = rsi(df)
-
-    macd_val, signal_val = macd(df)
-
-    rsi_v = df["RSI"].iloc[-1]
-
-    macd_v = macd_val.iloc[-1]
-    signal_v = signal_val.iloc[-1]
-
-    soporte, resistencia = soporte_resistencia(df)
-
-    precio = df["close"].iloc[-1]
-
-    if direccion == "CALL 🟢" and precio > resistencia * 0.995:
-        return None
-
-    if direccion == "PUT 🔴" and precio < soporte * 1.005:
-        return None
-
-    vol_ok = volumen_fuerte(df)
-
-    if not vol_ok:
-        return None
-
-    if mercado_lateral(df):
-        return None
-
-    prob = probabilidad(rsi_v,macd_v,signal_v,vol_ok)
-
-    return {
-        "symbol":symbol,
-        "direccion":direccion,
-        "prob":prob
-    }
-
+# =========================
+# MERCADO LOOP
+# =========================
 
 def mercado():
 
-    global contador_senales, hora_actual
+    enviar("🤖 DENA BOT INICIADO")
 
-    enviar("🤖 DENA PRO ACTIVADA")
+    activos = obtener_activos()
+
+    enviar(f"Activos detectados: {len(activos)}")
 
     while True:
 
-        hora = datetime.now().hour
+        print("Analizando mercado...")
 
-        if hora != hora_actual:
-            contador_senales = 0
-            hora_actual = hora
+        for symbol in activos:
 
-        if contador_senales < max_senales_hora:
+            señal = analizar(symbol)
 
-            oportunidades = []
+            if señal:
 
-            for s in symbols:
+                mensaje = f"""
 
-                try:
+🚨 SEÑAL DETECTADA
 
-                    r = analizar(s)
+Activo: {symbol}
 
-                    if r:
-                        oportunidades.append(r)
+Direccion: {señal}
 
-                except:
-                    pass
+Tiempo: 1 minuto
 
-            if oportunidades:
-
-                mejor = max(oportunidades, key=lambda x: x["prob"])
-
-                alerta = f"""
-
-🟡 ALERTA PREVIA
-
-Activo: {mejor["symbol"]}
-
-Posible dirección: {mejor["direccion"]}
-
-Prepararse para entrada en 3 minutos
+Hora: {datetime.now()}
 """
 
-                enviar(alerta)
+                enviar(mensaje)
 
-                time.sleep(180)
-
-                win = mejor["prob"]
-                lose = 100 - win
-
-                señal = f"""
-
-🟢 SEÑAL CONFIRMADA
-
-Activo: {mejor["symbol"]}
-
-Dirección: {mejor["direccion"]}
-
-Tiempo operación: 1m
-
-Probabilidad ganar: {win}%
-Probabilidad perder: {lose}%
-"""
-
-                enviar(señal)
-
-                registro.append(mejor)
-
-                contador_senales += 1
+                time.sleep(60)
 
         time.sleep(60)
 
+# =========================
+# HOME SERVER
+# =========================
 
 @app.route("/")
 def home():
-    return "DENA PRO ACTIVA"
 
+    return "DENA BOT ACTIVO"
+
+# =========================
+# INICIAR BOT
+# =========================
 
 threading.Thread(target=mercado).start()
 
-
 if __name__ == "__main__":
+
     app.run(host="0.0.0.0", port=10000)
