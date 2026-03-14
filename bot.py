@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 TOKEN="8544210127:AAEBmSGLnSutz5bMzz7Hij-R00GhVAEWkZ0"
 CHAT_ID="-1003524657786"
 
-exchange = ccxt.binance()
+exchange = ccxt.bybit()
 
 app = Flask(__name__)
 
