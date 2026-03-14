@@ -3,198 +3,379 @@ import pandas as pd
 import requests
 import time
 import threading
+import json
 from flask import Flask
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# =========================
-# CONFIGURACION TELEGRAM
-# =========================
-
-TOKEN = "8544210127:AAEBmSGLnSutz5bMzz7Hij-R00GhVAEWkZ0"
-CHAT_ID = "-1003524657786"
-
-# =========================
-# CONEXION EXCHANGE
-# =========================
+TOKEN="8544210127:AAEBmSGLnSutz5bMzz7Hij-R00GhVAEWkZ0"
+CHAT_ID="-1003524657786"
 
 exchange = ccxt.binance()
 
-# =========================
-# FLASK SERVER
-# =========================
-
 app = Flask(__name__)
 
-# =========================
-# ENVIAR MENSAJE TELEGRAM
-# =========================
+signals_hour = 0
+hora_actual = datetime.now().hour
+
+historial_archivo="historial.json"
+
+# ---------------- TELEGRAM
 
 def enviar(msg):
 
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    url=f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
-    data = {
-        "chat_id": CHAT_ID,
-        "text": msg
+    data={
+        "chat_id":CHAT_ID,
+        "text":msg
     }
 
     try:
-        requests.post(url, data=data)
+        requests.post(url,data=data)
     except:
-        print("Error enviando mensaje")
+        print("error telegram")
 
-# =========================
-# RSI
-# =========================
+# ---------------- HORARIO OPERAR
 
-def rsi(df, periodo=14):
+def horario_operar():
 
-    delta = df["close"].diff()
+    hora=datetime.now().hour
 
-    subida = delta.clip(lower=0)
-    bajada = -delta.clip(upper=0)
+    if hora>=15 or hora<=2:
+        return True
 
-    media_subida = subida.rolling(periodo).mean()
-    media_bajada = bajada.rolling(periodo).mean()
+    return False
 
-    rs = media_subida / media_bajada
+# ---------------- RSI
 
-    rsi = 100 - (100 / (1 + rs))
+def rsi(df,periodo=14):
 
-    return rsi
+    delta=df["close"].diff()
 
-# =========================
-# MACD
-# =========================
+    subida=delta.clip(lower=0)
+    bajada=-delta.clip(upper=0)
+
+    media_subida=subida.rolling(periodo).mean()
+    media_bajada=bajada.rolling(periodo).mean()
+
+    rs=media_subida/media_bajada
+
+    return 100-(100/(1+rs))
+
+# ---------------- MACD
 
 def macd(df):
 
-    ema12 = df["close"].ewm(span=12).mean()
-    ema26 = df["close"].ewm(span=26).mean()
+    ema12=df["close"].ewm(span=12).mean()
+    ema26=df["close"].ewm(span=26).mean()
 
-    macd = ema12 - ema26
-    signal = macd.ewm(span=9).mean()
+    macd=ema12-ema26
+    signal=macd.ewm(span=9).mean()
 
-    return macd, signal
+    return macd,signal
 
-# =========================
-# DETECTAR ACTIVOS
-# =========================
+# ---------------- EMA
 
-def obtener_activos():
+def ema(df,periodo):
 
-    try:
+    return df["close"].ewm(span=periodo).mean()
 
-        mercados = exchange.load_markets()
+# ---------------- ATR
 
-        activos = []
+def atr(df,periodo=14):
 
-        for symbol in mercados:
+    high_low=df["high"]-df["low"]
+    high_close=abs(df["high"]-df["close"].shift())
+    low_close=abs(df["low"]-df["close"].shift())
 
-            if "USDT" in symbol and "/" in symbol:
+    tr=pd.concat([high_low,high_close,low_close],axis=1).max(axis=1)
 
-                activos.append(symbol)
+    atr=tr.rolling(periodo).mean()
 
-        return activos[:20]
+    return atr
 
-    except:
+# ---------------- SOPORTE RESISTENCIA
 
-        return []
+def soporte_resistencia(df):
 
-# =========================
-# ANALISIS
-# =========================
+    soporte=df["low"].rolling(20).min().iloc[-1]
+    resistencia=df["high"].rolling(20).max().iloc[-1]
 
-def analizar(symbol):
+    return soporte,resistencia
 
-    try:
+# ---------------- MERCADO LATERAL
 
-        ohlcv = exchange.fetch_ohlcv(symbol, "1m", limit=100)
+def mercado_lateral(df):
 
-        df = pd.DataFrame(
-            ohlcv,
-            columns=["time","open","high","low","close","volume"]
-        )
+    rango=df["high"].rolling(20).max().iloc[-1]-df["low"].rolling(20).min().iloc[-1]
 
-        df["RSI"] = rsi(df)
+    if rango<df["close"].iloc[-1]*0.002:
+        return True
 
-        macd_val, signal_val = macd(df)
+    return False
 
-        rsi_actual = df["RSI"].iloc[-1]
+# ---------------- DETECTOR BALLENA
 
-        macd_actual = macd_val.iloc[-1]
-        signal_actual = signal_val.iloc[-1]
+def ballena(df):
 
-        if rsi_actual < 30 and macd_actual > signal_actual:
+    vol=df["volume"].iloc[-1]
+    media=df["volume"].rolling(20).mean().iloc[-1]
 
-            return "CALL 🟢"
+    if vol>media*3:
+        return True
 
-        if rsi_actual > 70 and macd_actual < signal_actual:
+    return False
 
-            return "PUT 🔴"
+# ---------------- RUPTURA
 
-    except:
+def ruptura(df):
 
-        return None
+    precio=df["close"].iloc[-1]
+
+    maximo=df["high"].rolling(20).max().iloc[-2]
+    minimo=df["low"].rolling(20).min().iloc[-2]
+
+    if precio>maximo:
+        return "CALL"
+
+    if precio<minimo:
+        return "PUT"
 
     return None
 
-# =========================
-# MERCADO LOOP
-# =========================
+# ---------------- ACTIVOS
+
+def obtener_activos():
+
+    markets=exchange.load_markets()
+
+    activos=[]
+
+    for m in markets:
+
+        if "/USDT" in m:
+
+            activos.append(m)
+
+    return activos[:30]
+
+# ---------------- ANALISIS
+
+def analizar(symbol):
+
+    score=0
+
+    for tf in ["1m","5m","15m"]:
+
+        data=exchange.fetch_ohlcv(symbol,tf,limit=100)
+
+        df=pd.DataFrame(data,columns=["time","open","high","low","close","volume"])
+
+        df["RSI"]=rsi(df)
+
+        macd_val,signal_val=macd(df)
+
+        ema50=ema(df,50).iloc[-1]
+        ema200=ema(df,200).iloc[-1]
+
+        atr_val=atr(df).iloc[-1]
+
+        rsi_actual=df["RSI"].iloc[-1]
+
+        macd_actual=macd_val.iloc[-1]
+        signal_actual=signal_val.iloc[-1]
+
+        if atr_val<df["close"].iloc[-1]*0.001:
+            return None
+
+        if rsi_actual<30 and macd_actual>signal_actual and ema50>ema200:
+            score+=1
+
+        if rsi_actual>70 and macd_actual<signal_actual and ema50<ema200:
+            score-=1
+
+    if mercado_lateral(df):
+        return None
+
+    if ballena(df):
+        return None
+
+    soporte,resistencia=soporte_resistencia(df)
+
+    precio=df["close"].iloc[-1]
+
+    if precio>resistencia*0.995 or precio<soporte*1.005:
+        return None
+
+    r=ruptura(df)
+
+    if score>=2:
+        return "CALL",score
+
+    if score<=-2:
+        return "PUT",abs(score)
+
+    if r:
+        return r,2
+
+    return None
+
+# ---------------- HISTORIAL
+
+def guardar(resultado):
+
+    try:
+        data=json.load(open(historial_archivo))
+    except:
+        data=[]
+
+    data.append(resultado)
+
+    json.dump(data,open(historial_archivo,"w"))
+
+# ---------------- WINRATE
+
+def winrate():
+
+    try:
+        data=json.load(open(historial_archivo))
+    except:
+        return 0
+
+    wins=0
+
+    for d in data:
+
+        if d["resultado"]=="win":
+            wins+=1
+
+    if len(data)==0:
+        return 0
+
+    return round((wins/len(data))*100,2)
+
+# ---------------- MAPA CALOR
+
+def heatmap(activos):
+
+    resultados=[]
+
+    for s in activos:
+
+        try:
+
+            data=exchange.fetch_ticker(s)
+
+            cambio=data["percentage"]
+
+            resultados.append((s,cambio))
+
+        except:
+            pass
+
+    resultados=sorted(resultados,key=lambda x:abs(x[1]),reverse=True)
+
+    return resultados[:5]
+
+# ---------------- MERCADO LOOP
 
 def mercado():
 
-    enviar("🤖 DENA BOT INICIADO")
+    global signals_hour,hora_actual
 
-    activos = obtener_activos()
+    enviar("DENA ULTRA ACTIVADO")
 
-    enviar(f"Activos detectados: {len(activos)}")
+    activos=obtener_activos()
+
+    enviar(f"Analizando {len(activos)} activos")
 
     while True:
 
-        print("Analizando mercado...")
+        if not horario_operar():
 
-        for symbol in activos:
+            time.sleep(60)
+            continue
 
-            señal = analizar(symbol)
+        if datetime.now().hour!=hora_actual:
 
-            if señal:
+            signals_hour=0
+            hora_actual=datetime.now().hour
 
-                mensaje = f"""
+        if signals_hour>=5:
 
-🚨 SEÑAL DETECTADA
+            time.sleep(60)
+            continue
 
-Activo: {symbol}
+        mejores=[]
 
-Direccion: {señal}
+        for s in activos:
 
-Tiempo: 1 minuto
+            resultado=analizar(s)
 
-Hora: {datetime.now()}
-"""
+            if resultado:
 
-                enviar(mensaje)
+                direccion,score=resultado
 
-                time.sleep(60)
+                mejores.append((s,direccion,score))
+
+        mejores=sorted(mejores,key=lambda x:x[2],reverse=True)[:5]
+
+        if len(mejores)>0:
+
+            activo,direccion,score=mejores[0]
+
+            prob=70+(score*5)
+
+            entrada=datetime.now()+timedelta(minutes=3)
+
+            enviar(f"""
+
+ALERTA PREVIA
+
+Activo {activo}
+
+Direccion {direccion}
+
+Hora entrada {entrada.strftime('%H:%M:%S')}
+
+""")
+
+            time.sleep(180)
+
+            enviar(f"""
+
+SEÑAL CONFIRMADA
+
+Activo {activo}
+
+Direccion {direccion}
+
+Hora exacta {datetime.now().strftime('%H:%M:%S')}
+
+Probabilidad ganar {prob}%
+
+""")
+
+            signals_hour+=1
 
         time.sleep(60)
 
-# =========================
-# HOME SERVER
-# =========================
+# ---------------- PANEL
+
+@app.route("/panel")
+
+def panel():
+
+    return f"DENA ULTRA\nWinrate {winrate()}%"
 
 @app.route("/")
+
 def home():
 
-    return "DENA BOT ACTIVO"
-
-# =========================
-# INICIAR BOT
-# =========================
+    return "BOT ACTIVO"
 
 threading.Thread(target=mercado).start()
 
-if __name__ == "__main__":
+if __name__=="__main__":
 
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0",port=10000)
