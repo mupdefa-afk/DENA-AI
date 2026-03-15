@@ -1,18 +1,17 @@
 import requests
 import time
 import random
+import threading
 from datetime import datetime, timedelta
 from flask import Flask
 import pytz
 
-app = Flask(__name__)
-
-# =========================
-# CONFIGURACIÓN
-# =========================
+app = Flask(_name_)
 
 TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
 CHAT_ID = "-1003524657786"
+
+zona = pytz.timezone("America/Guayaquil")
 
 ACTIVOS = [
 "BTC/USDT",
@@ -26,11 +25,9 @@ win = 0
 loss = 0
 total = 0
 
-zona = pytz.timezone("America/Guayaquil")
+senales_hora = 0
+hora_control = None
 
-# =========================
-# TELEGRAM
-# =========================
 
 def enviar_telegram(mensaje):
 
@@ -47,10 +44,6 @@ def enviar_telegram(mensaje):
         pass
 
 
-# =========================
-# GENERADOR DE SEÑALES
-# =========================
-
 def generar_senal():
 
     activo = random.choice(ACTIVOS)
@@ -63,28 +56,35 @@ def generar_senal():
 
     entrada = ahora + timedelta(minutes=1)
 
-    hora = entrada.strftime("%H:%M")
+    hora_alerta = ahora.strftime("%H:%M:%S")
+    hora_entrada = entrada.strftime("%H:%M:%S")
+
+    alerta = f"""
+🟡 ALERTA PREVIA DENA
+
+Activo: {activo}
+Posible dirección: {direccion}
+
+Hora alerta: {hora_alerta}
+
+⏳ Entrada aproximada: {hora_entrada}
+Prepárate.
+"""
 
     señal = f"""
-🚨 SEÑAL DENA AI
+🟢 SEÑAL CONFIRMADA DENA
 
 Activo: {activo}
 Dirección: {direccion}
 
-Hora de entrada: {hora}
+Hora exacta entrada: {hora_entrada}
 Expiración: 1M
 
 Probabilidad IA: {probabilidad}%
-
-⏳ Entrar en 1 minuto
 """
 
-    return señal
+    return alerta, señal
 
-
-# =========================
-# REGISTRO RESULTADOS
-# =========================
 
 def registrar_resultado():
 
@@ -102,10 +102,6 @@ def registrar_resultado():
         return "LOSS ❌"
 
 
-# =========================
-# PANEL ESTADÍSTICAS
-# =========================
-
 def panel():
 
     if total == 0:
@@ -114,7 +110,7 @@ def panel():
         wr = round((win/total)*100,2)
 
     mensaje = f"""
-📊 PANEL DENA AI
+📊 PANEL DENA
 
 Operaciones: {total}
 Wins: {win}
@@ -126,48 +122,53 @@ Winrate: {wr}%
     enviar_telegram(mensaje)
 
 
-# =========================
-# BOT LOOP
-# =========================
-
 def bot():
 
-    enviar_telegram("🤖 DENA AI ACTIVADO")
+    global senales_hora
+    global hora_control
+
+    enviar_telegram("🤖 DENA BOT ACTIVADO")
 
     while True:
 
-        señales_hora = random.randint(1,3)
+        ahora = datetime.now(zona)
+        hora_actual = ahora.hour
 
-        for i in range(señales_hora):
+        if hora_control != hora_actual:
+            senales_hora = 0
+            hora_control = hora_actual
 
-            señal = generar_senal()
+        if senales_hora < 5:
+
+            alerta, señal = generar_senal()
+
+            enviar_telegram(alerta)
+
+            time.sleep(60)
 
             enviar_telegram(señal)
 
-            time.sleep(120)
+            senales_hora += 1
+
+            time.sleep(60)
 
             resultado = registrar_resultado()
 
             enviar_telegram(f"Resultado operación: {resultado}")
 
-            time.sleep(60)
+            panel()
 
-        panel()
+        espera = random.randint(1200,2400)
 
-        time.sleep(3600)
+        time.sleep(espera)
 
-
-# =========================
-# SERVIDOR PARA RENDER
-# =========================
 
 @app.route("/")
 def home():
-    return "DENA AI ACTIVO"
+    return "DENA BOT ACTIVO"
 
 
-if __name__ == "__main__":
-    import threading
+if _name_ == "_main_":
 
     hilo = threading.Thread(target=bot)
     hilo.start()
