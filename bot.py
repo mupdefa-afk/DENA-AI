@@ -1,8 +1,9 @@
 import requests
 import time
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask
+import pytz
 
 app = Flask(__name__)
 
@@ -10,7 +11,8 @@ app = Flask(__name__)
 # CONFIGURACIÓN
 # =========================
 
-TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
+TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo
+"
 CHAT_ID = "-1003524657786"
 
 ACTIVOS = [
@@ -24,6 +26,8 @@ ACTIVOS = [
 win = 0
 loss = 0
 total = 0
+
+zona = pytz.timezone("America/Guayaquil")
 
 # =========================
 # TELEGRAM
@@ -52,25 +56,28 @@ def generar_senal():
 
     activo = random.choice(ACTIVOS)
 
-    direccion = random.choice(["CALL 📈", "PUT 📉"])
+    direccion = random.choice(["CALL 📈","PUT 📉"])
 
     probabilidad = random.randint(80,95)
 
-    ahora = datetime.now()
+    ahora = datetime.now(zona)
 
-    hora = ahora.strftime("%H:%M")
+    entrada = ahora + timedelta(minutes=1)
+
+    hora = entrada.strftime("%H:%M")
 
     señal = f"""
 🚨 SEÑAL DENA AI
 
 Activo: {activo}
 Dirección: {direccion}
+
 Hora de entrada: {hora}
 Expiración: 1M
 
 Probabilidad IA: {probabilidad}%
 
-Prepárate para operar.
+⏳ Entrar en 1 minuto
 """
 
     return señal
@@ -84,7 +91,7 @@ def registrar_resultado():
 
     global win, loss, total
 
-    resultado = random.choice(["win","loss","win","win"])
+    resultado = random.choice(["win","win","win","loss"])
 
     total += 1
 
@@ -97,7 +104,7 @@ def registrar_resultado():
 
 
 # =========================
-# PANEL DE ESTADÍSTICAS
+# PANEL ESTADÍSTICAS
 # =========================
 
 def panel():
@@ -107,7 +114,7 @@ def panel():
     else:
         wr = round((win/total)*100,2)
 
-    panel = f"""
+    mensaje = f"""
 📊 PANEL DENA AI
 
 Operaciones: {total}
@@ -117,7 +124,7 @@ Loss: {loss}
 Winrate: {wr}%
 """
 
-    enviar_telegram(panel)
+    enviar_telegram(mensaje)
 
 
 # =========================
@@ -138,7 +145,7 @@ def bot():
 
             enviar_telegram(señal)
 
-            time.sleep(60)
+            time.sleep(120)
 
             resultado = registrar_resultado()
 
@@ -152,7 +159,7 @@ def bot():
 
 
 # =========================
-# SERVIDOR RENDER
+# SERVIDOR PARA RENDER
 # =========================
 
 @app.route("/")
