@@ -3,11 +3,11 @@ import pandas as pd
 import requests
 import time
 import threading
-import json
 from flask import Flask
-from datetime import datetime, timedelta
+from datetime import datetime
 
 TOKEN="8544210127:AAEBmSGLnSutz5bMzz7Hij-R00GhVAEWkZ0"
+
 CHAT_ID="-1003524657786"
 
 exchange = ccxt.bybit()
@@ -17,9 +17,8 @@ app = Flask(__name__)
 signals_hour = 0
 hora_actual = datetime.now().hour
 
-historial_archivo="historial.json"
 
-# ---------------- TELEGRAM
+# ---------- TELEGRAM
 
 def enviar(msg):
 
@@ -35,7 +34,8 @@ def enviar(msg):
     except:
         print("error telegram")
 
-# ---------------- HORARIO OPERAR
+
+# ---------- HORARIO
 
 def horario_operar():
 
@@ -46,7 +46,8 @@ def horario_operar():
 
     return False
 
-# ---------------- RSI
+
+# ---------- RSI
 
 def rsi(df,periodo=14):
 
@@ -62,7 +63,8 @@ def rsi(df,periodo=14):
 
     return 100-(100/(1+rs))
 
-# ---------------- MACD
+
+# ---------- MACD
 
 def macd(df):
 
@@ -74,76 +76,8 @@ def macd(df):
 
     return macd,signal
 
-# ---------------- EMA
 
-def ema(df,periodo):
-
-    return df["close"].ewm(span=periodo).mean()
-
-# ---------------- ATR
-
-def atr(df,periodo=14):
-
-    high_low=df["high"]-df["low"]
-    high_close=abs(df["high"]-df["close"].shift())
-    low_close=abs(df["low"]-df["close"].shift())
-
-    tr=pd.concat([high_low,high_close,low_close],axis=1).max(axis=1)
-
-    atr=tr.rolling(periodo).mean()
-
-    return atr
-
-# ---------------- SOPORTE RESISTENCIA
-
-def soporte_resistencia(df):
-
-    soporte=df["low"].rolling(20).min().iloc[-1]
-    resistencia=df["high"].rolling(20).max().iloc[-1]
-
-    return soporte,resistencia
-
-# ---------------- MERCADO LATERAL
-
-def mercado_lateral(df):
-
-    rango=df["high"].rolling(20).max().iloc[-1]-df["low"].rolling(20).min().iloc[-1]
-
-    if rango<df["close"].iloc[-1]*0.002:
-        return True
-
-    return False
-
-# ---------------- DETECTOR BALLENA
-
-def ballena(df):
-
-    vol=df["volume"].iloc[-1]
-    media=df["volume"].rolling(20).mean().iloc[-1]
-
-    if vol>media*3:
-        return True
-
-    return False
-
-# ---------------- RUPTURA
-
-def ruptura(df):
-
-    precio=df["close"].iloc[-1]
-
-    maximo=df["high"].rolling(20).max().iloc[-2]
-    minimo=df["low"].rolling(20).min().iloc[-2]
-
-    if precio>maximo:
-        return "CALL"
-
-    if precio<minimo:
-        return "PUT"
-
-    return None
-
-# ---------------- ACTIVOS
+# ---------- ACTIVOS
 
 def obtener_activos():
 
@@ -154,20 +88,18 @@ def obtener_activos():
     for m in markets:
 
         if "/USDT" in m:
-
             activos.append(m)
 
-    return activos[:30]
+    return activos[:20]
 
-# ---------------- ANALISIS
+
+# ---------- ANALISIS
 
 def analizar(symbol):
 
-    score=0
+    try:
 
-    for tf in ["1m","5m","15m"]:
-
-        data=exchange.fetch_ohlcv(symbol,tf,limit=100)
+        data=exchange.fetch_ohlcv(symbol,"1m",limit=100)
 
         df=pd.DataFrame(data,columns=["time","open","high","low","close","volume"])
 
@@ -175,115 +107,31 @@ def analizar(symbol):
 
         macd_val,signal_val=macd(df)
 
-        ema50=ema(df,50).iloc[-1]
-        ema200=ema(df,200).iloc[-1]
-
-        atr_val=atr(df).iloc[-1]
-
         rsi_actual=df["RSI"].iloc[-1]
 
         macd_actual=macd_val.iloc[-1]
         signal_actual=signal_val.iloc[-1]
 
-        if atr_val<df["close"].iloc[-1]*0.001:
-            return None
+        if rsi_actual<35 and macd_actual>signal_val.iloc[-1]:
 
-        if rsi_actual<30 and macd_actual>signal_actual and ema50>ema200:
-            score+=1
+            return "CALL"
 
-        if rsi_actual>70 and macd_actual<signal_actual and ema50<ema200:
-            score-=1
+        if rsi_actual>65 and macd_actual<signal_val.iloc[-1]:
 
-    if mercado_lateral(df):
-        return None
+            return "PUT"
 
-    if ballena(df):
-        return None
-
-    soporte,resistencia=soporte_resistencia(df)
-
-    precio=df["close"].iloc[-1]
-
-    if precio>resistencia*0.995 or precio<soporte*1.005:
-        return None
-
-    r=ruptura(df)
-
-    if score>=2:
-        return "CALL",score
-
-    if score<=-2:
-        return "PUT",abs(score)
-
-    if r:
-        return r,2
-
-    return None
-
-# ---------------- HISTORIAL
-
-def guardar(resultado):
-
-    try:
-        data=json.load(open(historial_archivo))
     except:
-        data=[]
 
-    data.append(resultado)
+        return None
 
-    json.dump(data,open(historial_archivo,"w"))
 
-# ---------------- WINRATE
-
-def winrate():
-
-    try:
-        data=json.load(open(historial_archivo))
-    except:
-        return 0
-
-    wins=0
-
-    for d in data:
-
-        if d["resultado"]=="win":
-            wins+=1
-
-    if len(data)==0:
-        return 0
-
-    return round((wins/len(data))*100,2)
-
-# ---------------- MAPA CALOR
-
-def heatmap(activos):
-
-    resultados=[]
-
-    for s in activos:
-
-        try:
-
-            data=exchange.fetch_ticker(s)
-
-            cambio=data["percentage"]
-
-            resultados.append((s,cambio))
-
-        except:
-            pass
-
-    resultados=sorted(resultados,key=lambda x:abs(x[1]),reverse=True)
-
-    return resultados[:5]
-
-# ---------------- MERCADO LOOP
+# ---------- LOOP MERCADO
 
 def mercado():
 
     global signals_hour,hora_actual
 
-    enviar("DENA ULTRA ACTIVADO")
+    enviar("DENA BOT ACTIVADO")
 
     activos=obtener_activos()
 
@@ -301,81 +149,40 @@ def mercado():
             signals_hour=0
             hora_actual=datetime.now().hour
 
-        if signals_hour>=5:
+        if signals_hour>=3:
 
             time.sleep(60)
             continue
 
-        mejores=[]
-
         for s in activos:
 
-            resultado=analizar(s)
+            direccion=analizar(s)
 
-            if resultado:
+            if direccion:
 
-                direccion,score=resultado
+                enviar(f"""
 
-                mejores.append((s,direccion,score))
+SEÑAL DENA
 
-        mejores=sorted(mejores,key=lambda x:x[2],reverse=True)[:5]
+Activo: {s}
 
-        if len(mejores)>0:
+Dirección: {direccion}
 
-            activo,direccion,score=mejores[0]
+Hora: {datetime.now().strftime('%H:%M:%S')}
 
-            prob=70+(score*5)
-
-            entrada=datetime.now()+timedelta(minutes=3)
-
-            enviar(f"""
-
-ALERTA PREVIA
-
-Activo {activo}
-
-Direccion {direccion}
-
-Hora entrada {entrada.strftime('%H:%M:%S')}
+Tiempo operación: 1 minuto
 
 """)
 
-            time.sleep(180)
+                signals_hour+=1
 
-            enviar(f"""
+                time.sleep(60)
 
-SEÑAL CONFIRMADA
+                break
 
-Activo {activo}
+        time.sleep(20)
 
-Direccion {direccion}
 
-Hora exacta {datetime.now().strftime('%H:%M:%S')}
-
-Probabilidad ganar {prob}%
-
-""")
-
-            signals_hour+=1
-
-        time.sleep(60)
-
-# ---------------- PANEL
-
-@app.route("/panel")
-
-def panel():
-
-    return f"DENA ULTRA\nWinrate {winrate()}%"
+# ---------- PANEL
 
 @app.route("/")
-
-def home():
-
-    return "BOT ACTIVO"
-
-threading.Thread(target=mercado).start()
-
-if __name__=="__main__":
-
-    app.run(host="0.0.0.0",port=10000)
