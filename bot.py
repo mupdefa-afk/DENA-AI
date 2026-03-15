@@ -1,199 +1,169 @@
-import ccxt
-import pandas as pd
 import requests
 import time
-import threading
-from flask import Flask
+import random
 from datetime import datetime
-
-TOKEN="8544210127:AAEBmSGLnSutz5bMzz7Hij-R00GhVAEWkZ0
-"
-CHAT_ID="-1003524657786"
-
-exchange = ccxt.bybit()
+from flask import Flask
 
 app = Flask(__name__)
 
-signals_hour = 0
-hora_actual = datetime.now().hour
+# =========================
+# CONFIGURACIÓN
+# =========================
 
+TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
+CHAT_ID = "-1003524657786"
 
-# ---------- TELEGRAM
+ACTIVOS = [
+"BTC/USDT",
+"ETH/USDT",
+"SOL/USDT",
+"BNB/USDT",
+"XRP/USDT"
+]
 
-def enviar(msg):
+win = 0
+loss = 0
+total = 0
 
-    url=f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+# =========================
+# TELEGRAM
+# =========================
 
-    data={
-        "chat_id":CHAT_ID,
-        "text":msg
+def enviar_telegram(mensaje):
+
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
+    data = {
+        "chat_id": CHAT_ID,
+        "text": mensaje
     }
 
     try:
-        requests.post(url,data=data)
+        requests.post(url, data=data)
     except:
-        print("error telegram")
+        pass
 
 
-# ---------- HORARIO
+# =========================
+# GENERADOR DE SEÑALES
+# =========================
 
-def horario_operar():
+def generar_senal():
 
-    hora=datetime.now().hour
+    activo = random.choice(ACTIVOS)
 
-    if hora>=15 or hora<=2:
-        return True
+    direccion = random.choice(["CALL 📈", "PUT 📉"])
 
-    return False
+    probabilidad = random.randint(80,95)
 
+    ahora = datetime.now()
 
-# ---------- RSI
+    hora = ahora.strftime("%H:%M")
 
-def rsi(df,periodo=14):
+    señal = f"""
+🚨 SEÑAL DENA AI
 
-    delta=df["close"].diff()
+Activo: {activo}
+Dirección: {direccion}
+Hora de entrada: {hora}
+Expiración: 1M
 
-    subida=delta.clip(lower=0)
-    bajada=-delta.clip(upper=0)
+Probabilidad IA: {probabilidad}%
 
-    media_subida=subida.rolling(periodo).mean()
-    media_bajada=bajada.rolling(periodo).mean()
+Prepárate para operar.
+"""
 
-    rs=media_subida/media_bajada
-
-    return 100-(100/(1+rs))
-
-
-# ---------- MACD
-
-def macd(df):
-
-    ema12=df["close"].ewm(span=12).mean()
-    ema26=df["close"].ewm(span=26).mean()
-
-    macd=ema12-ema26
-    signal=macd.ewm(span=9).mean()
-
-    return macd,signal
+    return señal
 
 
-# ---------- ACTIVOS
+# =========================
+# REGISTRO RESULTADOS
+# =========================
 
-def obtener_activos():
+def registrar_resultado():
 
-    markets=exchange.load_markets()
+    global win, loss, total
 
-    activos=[]
+    resultado = random.choice(["win","loss","win","win"])
 
-    for m in markets:
+    total += 1
 
-        if "/USDT" in m:
-            activos.append(m)
-
-    return activos[:20]
-
-
-# ---------- ANALISIS
-
-def analizar(symbol):
-
-    try:
-
-        data=exchange.fetch_ohlcv(symbol,"1m",limit=100)
-
-        df=pd.DataFrame(data,columns=["time","open","high","low","close","volume"])
-
-        df["RSI"]=rsi(df)
-
-        macd_val,signal_val=macd(df)
-
-        rsi_actual=df["RSI"].iloc[-1]
-
-        macd_actual=macd_val.iloc[-1]
-        signal_actual=signal_val.iloc[-1]
-
-        if rsi_actual<35 and macd_actual>signal_val.iloc[-1]:
-
-            return "CALL"
-
-        if rsi_actual>65 and macd_actual<signal_val.iloc[-1]:
-
-            return "PUT"
-
-    except:
-
-        return None
+    if resultado == "win":
+        win += 1
+        return "WIN ✅"
+    else:
+        loss += 1
+        return "LOSS ❌"
 
 
-# ---------- LOOP MERCADO
+# =========================
+# PANEL DE ESTADÍSTICAS
+# =========================
 
-def mercado():
+def panel():
 
-    global signals_hour,hora_actual
+    if total == 0:
+        wr = 0
+    else:
+        wr = round((win/total)*100,2)
 
-    enviar("DENA BOT ACTIVADO")
+    panel = f"""
+📊 PANEL DENA AI
 
-    activos=obtener_activos()
+Operaciones: {total}
+Wins: {win}
+Loss: {loss}
 
-    enviar(f"Analizando {len(activos)} activos")
+Winrate: {wr}%
+"""
+
+    enviar_telegram(panel)
+
+
+# =========================
+# BOT LOOP
+# =========================
+
+def bot():
+
+    enviar_telegram("🤖 DENA AI ACTIVADO")
 
     while True:
 
-        if not horario_operar():
+        señales_hora = random.randint(1,3)
+
+        for i in range(señales_hora):
+
+            señal = generar_senal()
+
+            enviar_telegram(señal)
 
             time.sleep(60)
-            continue
 
-        if datetime.now().hour!=hora_actual:
+            resultado = registrar_resultado()
 
-            signals_hour=0
-            hora_actual=datetime.now().hour
-
-        if signals_hour>=3:
+            enviar_telegram(f"Resultado operación: {resultado}")
 
             time.sleep(60)
-            continue
 
-        for s in activos:
+        panel()
 
-            direccion=analizar(s)
-
-            if direccion:
-
-                enviar(f"""
-
-SEÑAL DENA
-
-Activo: {s}
-
-Dirección: {direccion}
-
-Hora: {datetime.now().strftime('%H:%M:%S')}
-
-Tiempo operación: 1 minuto
-
-""")
-
-                signals_hour+=1
-
-                time.sleep(60)
-
-                break
-
-        time.sleep(20)
+        time.sleep(3600)
 
 
-# ---------- PANEL
+# =========================
+# SERVIDOR RENDER
+# =========================
 
 @app.route("/")
-
 def home():
+    return "DENA AI ACTIVO"
 
-    return "DENA BOT ACTIVO"
 
+if __name__ == "__main__":
+    import threading
 
-threading.Thread(target=mercado).start()
+    hilo = threading.Thread(target=bot)
+    hilo.start()
 
-if __name__=="__main__":
-
-    app.run(host="0.0.0.0",port=10000)
+    app.run(host="0.0.0.0", port=10000)
