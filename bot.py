@@ -11,8 +11,7 @@ app = Flask(__name__)
 # CONFIGURACIÓN
 # =========================
 
-TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo
-"
+TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
 CHAT_ID = "-1003524657786"
 
 ACTIVOS = [
