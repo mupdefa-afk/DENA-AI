@@ -6,8 +6,8 @@ import threading
 from flask import Flask
 from datetime import datetime
 
-TOKEN="8544210127:AAEBmSGLnSutz5bMzz7Hij-R00GhVAEWkZ0"
-
+TOKEN="8544210127:AAEBmSGLnSutz5bMzz7Hij-R00GhVAEWkZ0
+"
 CHAT_ID="-1003524657786"
 
 exchange = ccxt.bybit()
@@ -186,3 +186,14 @@ Tiempo operación: 1 minuto
 # ---------- PANEL
 
 @app.route("/")
+
+def home():
+
+    return "DENA BOT ACTIVO"
+
+
+threading.Thread(target=mercado).start()
+
+if __name__=="__main__":
+
+    app.run(host="0.0.0.0",port=10000)
