@@ -9,8 +9,7 @@ import pytz
 app = Flask(__name__)
 
 TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
-CHAT_ID = "-1003524657786
-"
+CHAT_ID = "-1003524657786"
 
 zona = pytz.timezone("America/Guayaquil")
 
