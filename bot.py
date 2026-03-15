@@ -6,10 +6,11 @@ from datetime import datetime, timedelta
 from flask import Flask
 import pytz
 
-app = Flask(_name_)
+app = Flask(__name__)
 
 TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
-CHAT_ID = "-1003524657786"
+CHAT_ID = "-1003524657786
+"
 
 zona = pytz.timezone("America/Guayaquil")
 
@@ -66,8 +67,8 @@ Activo: {activo}
 Posible dirección: {direccion}
 
 Hora alerta: {hora_alerta}
+Entrada estimada: {hora_entrada}
 
-⏳ Entrada aproximada: {hora_entrada}
 Prepárate.
 """
 
@@ -168,7 +169,7 @@ def home():
     return "DENA BOT ACTIVO"
 
 
-if _name_ == "_main_":
+if __name__ == "__main__":
 
     hilo = threading.Thread(target=bot)
     hilo.start()
