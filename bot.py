@@ -13,12 +13,18 @@ CHAT_ID = "-1003524657786"
 
 zona = pytz.timezone("America/Guayaquil")
 
+# activos compatibles con OTC de Exnova
 ACTIVOS = [
 "BTC/USDT",
 "ETH/USDT",
-"SOL/USDT",
 "BNB/USDT",
-"XRP/USDT"
+"SOL/USDT",
+"XRP/USDT",
+"ADA/USDT",
+"DOGE/USDT",
+"LTC/USDT",
+"TRX/USDT",
+"DOT/USDT"
 ]
 
 wins = 0
@@ -29,17 +35,17 @@ senales_hora = 0
 hora_control = None
 
 
-def enviar_telegram(msg):
+def enviar_telegram(mensaje):
 
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
     data = {
         "chat_id": CHAT_ID,
-        "text": msg
+        "text": mensaje
     }
 
     try:
-        requests.post(url, data=data)
+        requests.post(url, data=data, timeout=10)
     except:
         pass
 
@@ -47,9 +53,6 @@ def enviar_telegram(msg):
 def horario_permitido():
 
     ahora = datetime.now(zona)
-
-    inicio = ahora.replace(hour=15, minute=0, second=0)
-    fin = ahora.replace(hour=2, minute=0, second=0)
 
     if ahora.hour >= 15 or ahora.hour < 2:
         return True
@@ -61,9 +64,9 @@ def generar_senal():
 
     activo = random.choice(ACTIVOS)
 
-    direccion = random.choice(["CALL 📈","PUT 📉"])
+    direccion = random.choice(["CALL 📈", "PUT 📉"])
 
-    probabilidad = random.randint(80,95)
+    probabilidad = random.randint(80, 94)
 
     ahora = datetime.now(zona)
 
@@ -76,16 +79,16 @@ Activo: {activo}
 Dirección posible: {direccion}
 
 Hora alerta: {ahora.strftime("%H:%M:%S")}
-Entrada estimada: {entrada.strftime("%H:%M:%S")}
+Hora estimada de entrada: {entrada.strftime("%H:%M:%S")}
 """
 
     señal = f"""
-🟢 SEÑAL CONFIRMADA
+🟢 SEÑAL CONFIRMADA DENA
 
 Activo: {activo}
 Dirección: {direccion}
 
-Hora entrada: {entrada.strftime("%H:%M:%S")}
+Hora exacta de entrada: {entrada.strftime("%H:%M:%S")}
 Expiración: 1M
 
 Probabilidad IA: {probabilidad}%
@@ -135,7 +138,7 @@ def bot():
     global senales_hora
     global hora_control
 
-    enviar_telegram("🤖 DENA BOT ACTIVO")
+    enviar_telegram("🤖 DENA BOT ACTIVADO")
 
     while True:
 
@@ -178,7 +181,7 @@ def bot():
 
 @app.route("/")
 def home():
-    return "BOT DENA ACTIVO"
+    return "DENA BOT ACTIVO"
 
 
 if __name__ == "__main__":
