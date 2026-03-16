@@ -8,7 +8,8 @@ import pytz
 
 app = Flask(__name__)
 
-TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
+TOKEN = "
+8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
 CHAT_ID = "-1003524657786"
 
 zona = pytz.timezone("America/Guayaquil")
@@ -26,7 +27,7 @@ loss = 0
 total = 0
 
 senales_hora = 0
-hora_control = None
+hora_actual = None
 
 
 def enviar_telegram(mensaje):
@@ -48,7 +49,7 @@ def generar_senal():
 
     activo = random.choice(ACTIVOS)
 
-    direccion = random.choice(["CALL 📈","PUT 📉"])
+    direccion = random.choice(["CALL 📈", "PUT 📉"])
 
     probabilidad = random.randint(80,95)
 
@@ -67,8 +68,6 @@ Posible dirección: {direccion}
 
 Hora alerta: {hora_alerta}
 Entrada estimada: {hora_entrada}
-
-Prepárate.
 """
 
     señal = f"""
@@ -125,18 +124,17 @@ Winrate: {wr}%
 def bot():
 
     global senales_hora
-    global hora_control
+    global hora_actual
 
     enviar_telegram("🤖 DENA BOT ACTIVADO")
 
     while True:
 
         ahora = datetime.now(zona)
-        hora_actual = ahora.hour
 
-        if hora_control != hora_actual:
+        if hora_actual != ahora.hour:
             senales_hora = 0
-            hora_control = hora_actual
+            hora_actual = ahora.hour
 
         if senales_hora < 5:
 
