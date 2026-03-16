@@ -21,21 +21,21 @@ ACTIVOS = [
 "XRP/USDT"
 ]
 
-win = 0
+wins = 0
 loss = 0
 total = 0
 
 senales_hora = 0
-hora_actual = None
+hora_control = None
 
 
-def enviar_telegram(mensaje):
+def enviar_telegram(msg):
 
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
     data = {
         "chat_id": CHAT_ID,
-        "text": mensaje
+        "text": msg
     }
 
     try:
@@ -44,11 +44,24 @@ def enviar_telegram(mensaje):
         pass
 
 
+def horario_permitido():
+
+    ahora = datetime.now(zona)
+
+    inicio = ahora.replace(hour=15, minute=0, second=0)
+    fin = ahora.replace(hour=2, minute=0, second=0)
+
+    if ahora.hour >= 15 or ahora.hour < 2:
+        return True
+
+    return False
+
+
 def generar_senal():
 
     activo = random.choice(ACTIVOS)
 
-    direccion = random.choice(["CALL 📈", "PUT 📉"])
+    direccion = random.choice(["CALL 📈","PUT 📉"])
 
     probabilidad = random.randint(80,95)
 
@@ -56,26 +69,23 @@ def generar_senal():
 
     entrada = ahora + timedelta(minutes=1)
 
-    hora_alerta = ahora.strftime("%H:%M:%S")
-    hora_entrada = entrada.strftime("%H:%M:%S")
-
     alerta = f"""
 🟡 ALERTA PREVIA DENA
 
 Activo: {activo}
-Posible dirección: {direccion}
+Dirección posible: {direccion}
 
-Hora alerta: {hora_alerta}
-Entrada estimada: {hora_entrada}
+Hora alerta: {ahora.strftime("%H:%M:%S")}
+Entrada estimada: {entrada.strftime("%H:%M:%S")}
 """
 
     señal = f"""
-🟢 SEÑAL CONFIRMADA DENA
+🟢 SEÑAL CONFIRMADA
 
 Activo: {activo}
 Dirección: {direccion}
 
-Hora exacta entrada: {hora_entrada}
+Hora entrada: {entrada.strftime("%H:%M:%S")}
 Expiración: 1M
 
 Probabilidad IA: {probabilidad}%
@@ -86,14 +96,14 @@ Probabilidad IA: {probabilidad}%
 
 def registrar_resultado():
 
-    global win, loss, total
+    global wins, loss, total
 
     resultado = random.choice(["win","win","win","loss"])
 
     total += 1
 
     if resultado == "win":
-        win += 1
+        wins += 1
         return "WIN ✅"
     else:
         loss += 1
@@ -105,13 +115,13 @@ def panel():
     if total == 0:
         wr = 0
     else:
-        wr = round((win/total)*100,2)
+        wr = round((wins/total)*100,2)
 
     mensaje = f"""
 📊 PANEL DENA
 
 Operaciones: {total}
-Wins: {win}
+Wins: {wins}
 Loss: {loss}
 
 Winrate: {wr}%
@@ -123,17 +133,23 @@ Winrate: {wr}%
 def bot():
 
     global senales_hora
-    global hora_actual
+    global hora_control
 
-    enviar_telegram("🤖 DENA BOT ACTIVADO")
+    enviar_telegram("🤖 DENA BOT ACTIVO")
 
     while True:
 
         ahora = datetime.now(zona)
 
-        if hora_actual != ahora.hour:
+        if not horario_permitido():
+
+            time.sleep(300)
+            continue
+
+        if hora_control != ahora.hour:
+
             senales_hora = 0
-            hora_actual = ahora.hour
+            hora_control = ahora.hour
 
         if senales_hora < 5:
 
@@ -162,7 +178,7 @@ def bot():
 
 @app.route("/")
 def home():
-    return "DENA BOT ACTIVO"
+    return "BOT DENA ACTIVO"
 
 
 if __name__ == "__main__":
