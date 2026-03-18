@@ -161,3 +161,18 @@ import threading
 
 threading.Thread(target=heartbeat).start()
 main() 
+
+import threading
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "DENA BOT ACTIVO"
+
+def run_web():
+    app.run(host='0.0.0.0', port=10000)
+
+# Ejecutar servidor web en paralelo
+threading.Thread(target=run_web).start()
