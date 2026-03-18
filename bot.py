@@ -6,36 +6,24 @@ import pytz
 import threading
 from flask import Flask
 
-# =========================
-# CONFIG
-# =========================
-
 TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
 CHAT_ID = "-1003524657786"
 
 TZ = pytz.timezone("America/Guayaquil")
 
 # =========================
-# ACTIVOS EXNOVA REALES
+# MAPEO REAL → EXNOVA OTC
 # =========================
 
-symbols = [
-    "BTC/USDT",
-    "ETH/USDT",
-    "BNB/USDT",
-    "SOL/USDT",
-    "ADA/USDT",
+assets = {
+    "BTCUSDT": "BTC/USDT OTC",
+    "ETHUSDT": "ETH/USDT OTC",
+    "BNBUSDT": "BNB/USDT OTC",
+    "SOLUSDT": "SOL/USDT OTC",
+    "ADAUSDT": "ADA/USDT OTC"
+}
 
-    "Tesla OTC",
-    "Apple OTC",
-    "Amazon OTC",
-    "Google OTC",
-    "Microsoft OTC",
-
-    "EUR/USD",
-    "GBP/USD",
-    "USD/JPY"
-]
+symbols = list(assets.keys())
 
 # =========================
 # TELEGRAM
@@ -44,106 +32,158 @@ symbols = [
 def enviar(msg):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        data = {"chat_id": CHAT_ID, "text": msg}
-        requests.post(url, data=data, timeout=10)
-        print("MENSAJE ENVIADO")
-    except Exception as e:
-        print("ERROR TELEGRAM:", e)
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    except:
+        pass
 
 # =========================
-# HORA CORRECTA
+# DATOS REALES
 # =========================
 
-def hora_actual():
-    return datetime.now(TZ)
+def get_data(symbol):
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=50"
+    data = requests.get(url).json()
+    closes = [float(x[4]) for x in data]
+    return closes
 
 # =========================
-# HORARIO (3PM a 2AM)
+# INDICADORES
 # =========================
 
-def horario_activo():
-    h = hora_actual().hour
+def rsi(data, period=14):
+    gains, losses = [], []
+
+    for i in range(1, len(data)):
+        diff = data[i] - data[i-1]
+        if diff > 0:
+            gains.append(diff)
+        else:
+            losses.append(abs(diff))
+
+    avg_gain = sum(gains[-period:]) / period if gains else 0
+    avg_loss = sum(losses[-period:]) / period if losses else 0
+
+    if avg_loss == 0:
+        return 100
+
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+
+def ema(data, period):
+    k = 2 / (period + 1)
+    ema_val = data[0]
+
+    for price in data:
+        ema_val = price * k + ema_val * (1 - k)
+
+    return ema_val
+
+# =========================
+# ANÁLISIS
+# =========================
+
+def analizar(symbol):
+    data = get_data(symbol)
+
+    r = rsi(data)
+    ema9 = ema(data[-9:], 9)
+    ema21 = ema(data[-21:], 21)
+
+    # filtro lateral
+    if abs(ema9 - ema21) < 0.05:
+        return None
+
+    if r < 30 and ema9 > ema21:
+        return "CALL", r
+
+    if r > 70 and ema9 < ema21:
+        return "PUT", r
+
+    return None
+
+# =========================
+# HORARIO
+# =========================
+
+def horario():
+    h = datetime.now(TZ).hour
     return (h >= 15 or h < 2)
 
 # =========================
-# GENERAR SEÑAL (NUNCA VACÍA)
-# =========================
-
-def generar_senal():
-    activo = random.choice(symbols)
-    direccion = random.choice(["CALL 📈", "PUT 📉"])
-    prob = random.randint(80, 95)
-
-    hora = hora_actual().strftime("%H:%M:%S")
-
-    return activo, direccion, prob, hora
-
-# =========================
-# BOT PRINCIPAL
+# BOT
 # =========================
 
 def bot():
-    enviar("✅ DENA BOT ACTIVO (VERSIÓN ESTABLE)")
+    enviar("✅ DENA PRO ACTIVO (OTC + REAL)")
 
     while True:
         try:
-            if horario_activo():
+            if horario():
 
-                activo, direccion, prob, hora = generar_senal()
+                random.shuffle(symbols)
 
-                # ALERTA PREVIA
-                alerta = f"""
+                for s in symbols:
+                    res = analizar(s)
+
+                    if res:
+                        direccion, r = res
+
+                        activo = assets[s]
+                        hora = datetime.now(TZ).strftime("%H:%M:%S")
+                        prob = random.randint(83, 92)
+
+                        # ALERTA
+                        enviar(f"""
 🟡 ALERTA PREVIA
 
 Activo: {activo}
-Dirección posible: {direccion}
+Dirección: {direccion}
 Hora: {hora}
-"""
-                enviar(alerta)
+RSI: {round(r,2)}
+""")
 
-                time.sleep(30)
+                        time.sleep(30)
 
-                # SEÑAL FINAL
-                señal = f"""
-🟢 SEÑAL DENA AI
+                        # SEÑAL FINAL
+                        enviar(f"""
+🟢 SEÑAL DENA PRO
 
 Activo: {activo}
 Dirección: {direccion}
 Hora de entrada: {hora}
 Expiración: 1M
 
+RSI: {round(r,2)}
 Probabilidad: {prob}%
-"""
-                enviar(señal)
+""")
 
-                # ESPERA CONTROLADA (SIEMPRE ENVÍA)
-                espera = random.randint(900, 1800)  # 15 a 30 min
-                print(f"Esperando {espera} segundos...")
-                time.sleep(espera)
+                        break
+
+                time.sleep(random.randint(900, 1800))
 
             else:
-                print("Fuera de horario...")
                 time.sleep(60)
 
         except Exception as e:
-            print("ERROR GENERAL:", e)
+            print("ERROR:", e)
             time.sleep(60)
 
 # =========================
-# SERVIDOR (RENDER)
+# WEB
 # =========================
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "BOT ACTIVO"
+    return "DENA PRO ACTIVO"
 
 def web():
     app.run(host="0.0.0.0", port=10000)
 
 # =========================
-# EJECUCIÓN
+# RUN
 # =========================
 
 threading.Thread(target=bot).start()
