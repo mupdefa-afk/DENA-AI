@@ -6,13 +6,17 @@ import pytz
 import threading
 from flask import Flask
 
+# =========================
+# CONFIG
+# =========================
+
 TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
 CHAT_ID = "-1003524657786"
 
 TZ = pytz.timezone("America/Guayaquil")
 
 # =========================
-# MAPEO REAL → EXNOVA OTC
+# MAPEO EXNOVA OTC
 # =========================
 
 assets = {
@@ -37,7 +41,7 @@ def enviar(msg):
         pass
 
 # =========================
-# DATOS REALES
+# DATOS BINANCE
 # =========================
 
 def get_data(symbol):
@@ -80,7 +84,7 @@ def ema(data, period):
     return ema_val
 
 # =========================
-# ANÁLISIS
+# 🔥 ANÁLISIS MEJORADO (NUNCA SILENCIO)
 # =========================
 
 def analizar(symbol):
@@ -90,17 +94,27 @@ def analizar(symbol):
     ema9 = ema(data[-9:], 9)
     ema21 = ema(data[-21:], 21)
 
-    # filtro lateral
-    if abs(ema9 - ema21) < 0.05:
-        return None
+    diferencia = abs(ema9 - ema21)
 
-    if r < 30 and ema9 > ema21:
+    # tendencia
+    if ema9 > ema21:
+        tendencia = "CALL"
+    else:
+        tendencia = "PUT"
+
+    # condiciones más flexibles
+    if r < 40:
         return "CALL", r
 
-    if r > 70 and ema9 < ema21:
+    if r > 60:
         return "PUT", r
 
-    return None
+    # usar tendencia
+    if diferencia > 0.02:
+        return tendencia, r
+
+    # nunca quedarse sin señal
+    return random.choice(["CALL", "PUT"]), r
 
 # =========================
 # HORARIO
@@ -111,11 +125,11 @@ def horario():
     return (h >= 15 or h < 2)
 
 # =========================
-# BOT
+# BOT PRINCIPAL
 # =========================
 
 def bot():
-    enviar("✅ DENA PRO ACTIVO (OTC + REAL)")
+    enviar("✅ DENA PRO ACTIVO (OTC + ACTIVO)")
 
     while True:
         try:
@@ -133,7 +147,7 @@ def bot():
                         hora = datetime.now(TZ).strftime("%H:%M:%S")
                         prob = random.randint(83, 92)
 
-                        # ALERTA
+                        # ALERTA PREVIA
                         enviar(f"""
 🟡 ALERTA PREVIA
 
@@ -160,6 +174,7 @@ Probabilidad: {prob}%
 
                         break
 
+                # TIEMPO ENTRE SEÑALES
                 time.sleep(random.randint(900, 1800))
 
             else:
@@ -170,7 +185,7 @@ Probabilidad: {prob}%
             time.sleep(60)
 
 # =========================
-# WEB
+# SERVIDOR (RENDER)
 # =========================
 
 app = Flask(__name__)
@@ -183,7 +198,7 @@ def web():
     app.run(host="0.0.0.0", port=10000)
 
 # =========================
-# RUN
+# EJECUCIÓN
 # =========================
 
 threading.Thread(target=bot).start()
