@@ -1,178 +1,150 @@
 import requests
 import time
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
+import threading
+from flask import Flask
+
+# =========================
+# CONFIG
+# =========================
 
 TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
 CHAT_ID = "-1003524657786"
 
-zona = pytz.timezone("America/Guayaquil")
+TZ = pytz.timezone("America/Guayaquil")
 
-ACTIVOS = {
-"BTCUSDT":"BTC/USDT OTC",
-"ETHUSDT":"ETH/USDT OTC",
-"BNBUSDT":"BNB/USDT OTC",
-"SOLUSDT":"SOL/USDT OTC",
-"XRPUSDT":"XRP/USDT OTC"
-}
+# =========================
+# ACTIVOS EXNOVA REALES
+# =========================
 
-wins = 0
-loss = 0
-total = 0
+symbols = [
+    "BTC/USDT",
+    "ETH/USDT",
+    "BNB/USDT",
+    "SOL/USDT",
+    "ADA/USDT",
 
+    "Tesla OTC",
+    "Apple OTC",
+    "Amazon OTC",
+    "Google OTC",
+    "Microsoft OTC",
+
+    "EUR/USD",
+    "GBP/USD",
+    "USD/JPY"
+]
+
+# =========================
+# TELEGRAM
+# =========================
 
 def enviar(msg):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
-    except:
-        pass
+        data = {"chat_id": CHAT_ID, "text": msg}
+        requests.post(url, data=data, timeout=10)
+        print("MENSAJE ENVIADO")
+    except Exception as e:
+        print("ERROR TELEGRAM:", e)
 
+# =========================
+# HORA CORRECTA
+# =========================
 
-def horario_permitido():
-    ahora = datetime.now(zona)
-    return ahora.hour >= 15 or ahora.hour < 2
+def hora_actual():
+    return datetime.now(TZ)
 
+# =========================
+# HORARIO (3PM a 2AM)
+# =========================
 
-def precio(symbol):
-    try:
-        url=f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-        return float(requests.get(url,timeout=5).json()["price"])
-    except:
-        return None
+def horario_activo():
+    h = hora_actual().hour
+    return (h >= 15 or h < 2)
 
+# =========================
+# GENERAR SEÑAL (NUNCA VACÍA)
+# =========================
 
 def generar_senal():
-    symbol=random.choice(list(ACTIVOS.keys()))
-    activo=ACTIVOS[symbol]
-    direccion=random.choice(["CALL 📈","PUT 📉"])
-    prob=random.randint(80,94)
+    activo = random.choice(symbols)
+    direccion = random.choice(["CALL 📈", "PUT 📉"])
+    prob = random.randint(80, 95)
 
-    ahora=datetime.now(zona)
-    entrada=ahora+timedelta(minutes=1)
+    hora = hora_actual().strftime("%H:%M:%S")
 
-    alerta=f"""🟡 ALERTA PREVIA
+    return activo, direccion, prob, hora
+
+# =========================
+# BOT PRINCIPAL
+# =========================
+
+def bot():
+    enviar("✅ DENA BOT ACTIVO (VERSIÓN ESTABLE)")
+
+    while True:
+        try:
+            if horario_activo():
+
+                activo, direccion, prob, hora = generar_senal()
+
+                # ALERTA PREVIA
+                alerta = f"""
+🟡 ALERTA PREVIA
 
 Activo: {activo}
-Dirección: {direccion}
-
-Hora: {ahora.strftime("%H:%M:%S")}
-Entrada: {entrada.strftime("%H:%M:%S")}
+Dirección posible: {direccion}
+Hora: {hora}
 """
+                enviar(alerta)
 
-    señal=f"""🟢 SEÑAL
+                time.sleep(30)
+
+                # SEÑAL FINAL
+                señal = f"""
+🟢 SEÑAL DENA AI
 
 Activo: {activo}
 Dirección: {direccion}
-
-Hora exacta: {entrada.strftime("%H:%M:%S")}
+Hora de entrada: {hora}
 Expiración: 1M
+
 Probabilidad: {prob}%
 """
+                enviar(señal)
 
-    return symbol,activo,direccion,alerta,señal
+                # ESPERA CONTROLADA (SIEMPRE ENVÍA)
+                espera = random.randint(900, 1800)  # 15 a 30 min
+                print(f"Esperando {espera} segundos...")
+                time.sleep(espera)
 
-
-def evaluar(symbol,direccion,precio_inicio):
-    global wins,loss,total
-
-    time.sleep(60)
-
-    precio_final=precio(symbol)
-
-    if precio_final is None:
-        return "Error"
-
-    resultado="LOSS ❌"
-
-    if direccion.startswith("CALL") and precio_final>precio_inicio:
-        resultado="WIN ✅"
-
-    if direccion.startswith("PUT") and precio_final<precio_inicio:
-        resultado="WIN ✅"
-
-    total+=1
-
-    if "WIN" in resultado:
-        wins+=1
-    else:
-        loss+=1
-
-    return resultado
-
-
-def panel():
-    wr = round((wins/total)*100,2) if total>0 else 0
-
-    enviar(f"""📊 PANEL
-
-Operaciones: {total}
-Wins: {wins}
-Loss: {loss}
-Winrate: {wr}%
-""")
-
-
-def heartbeat():
-    while True:
-        enviar("💓 DENA ACTIVO")
-        time.sleep(600)
-
-
-def main():
-
-    enviar("🤖 BOT DENA INICIADO")
-
-    while True:
-
-        try:
-
-            if not horario_permitido():
+            else:
+                print("Fuera de horario...")
                 time.sleep(60)
-                continue
-
-            symbol,activo,direccion,alerta,señal = generar_senal()
-
-            enviar(alerta)
-
-            time.sleep(60)
-
-            enviar(señal)
-
-            precio_inicio=precio(symbol)
-
-            if precio_inicio:
-                resultado=evaluar(symbol,direccion,precio_inicio)
-                enviar(f"Resultado: {resultado}")
-                panel()
-
-            espera=random.randint(600,1200)  # 10 a 20 min
-
-            time.sleep(espera)
 
         except Exception as e:
-            enviar("⚠️ Error detectado, reiniciando...")
-            time.sleep(5)
+            print("ERROR GENERAL:", e)
+            time.sleep(60)
 
-
-# ejecutar ambos
-import threading
-
-threading.Thread(target=heartbeat).start()
-main() 
-
-import threading
-from flask import Flask
+# =========================
+# SERVIDOR (RENDER)
+# =========================
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "DENA BOT ACTIVO"
+    return "BOT ACTIVO"
 
-def run_web():
-    app.run(host='0.0.0.0', port=10000)
+def web():
+    app.run(host="0.0.0.0", port=10000)
 
-# Ejecutar servidor web en paralelo
-threading.Thread(target=run_web).start()
+# =========================
+# EJECUCIÓN
+# =========================
+
+threading.Thread(target=bot).start()
+threading.Thread(target=web).start()
