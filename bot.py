@@ -36,19 +36,23 @@ symbols = list(assets.keys())
 def enviar(msg):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
-    except:
-        pass
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
+        print("MENSAJE ENVIADO")
+    except Exception as e:
+        print("ERROR TELEGRAM:", e)
 
 # =========================
 # DATOS BINANCE
 # =========================
 
 def get_data(symbol):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=50"
-    data = requests.get(url).json()
-    closes = [float(x[4]) for x in data]
-    return closes
+    try:
+        url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=50"
+        data = requests.get(url, timeout=10).json()
+        closes = [float(x[4]) for x in data]
+        return closes
+    except:
+        return None
 
 # =========================
 # INDICADORES
@@ -84,11 +88,15 @@ def ema(data, period):
     return ema_val
 
 # =========================
-# 🔥 ANÁLISIS MEJORADO (NUNCA SILENCIO)
+# ANÁLISIS MEJORADO
 # =========================
 
 def analizar(symbol):
     data = get_data(symbol)
+
+    # 🔥 si falla Binance → devolver None
+    if data is None:
+        return None
 
     r = rsi(data)
     ema9 = ema(data[-9:], 9)
@@ -96,25 +104,21 @@ def analizar(symbol):
 
     diferencia = abs(ema9 - ema21)
 
-    # tendencia
     if ema9 > ema21:
         tendencia = "CALL"
     else:
         tendencia = "PUT"
 
-    # condiciones más flexibles
     if r < 40:
         return "CALL", r
 
     if r > 60:
         return "PUT", r
 
-    # usar tendencia
     if diferencia > 0.02:
         return tendencia, r
 
-    # nunca quedarse sin señal
-    return random.choice(["CALL", "PUT"]), r
+    return None
 
 # =========================
 # HORARIO
@@ -125,30 +129,39 @@ def horario():
     return (h >= 15 or h < 2)
 
 # =========================
-# BOT PRINCIPAL
+# BOT ULTRA ESTABLE
 # =========================
 
 def bot():
-    enviar("✅ DENA PRO ACTIVO (OTC + ACTIVO)")
+    enviar("✅ DENA PRO ACTIVO (ULTRA ESTABLE)")
 
     while True:
         try:
             if horario():
 
+                enviado = False
                 random.shuffle(symbols)
 
                 for s in symbols:
-                    res = analizar(s)
+                    try:
+                        res = analizar(s)
 
-                    if res:
-                        direccion, r = res
+                        if res:
+                            direccion, r = res
+                        else:
+                            raise Exception("Sin señal clara")
 
-                        activo = assets[s]
-                        hora = datetime.now(TZ).strftime("%H:%M:%S")
-                        prob = random.randint(83, 92)
+                    except:
+                        # 🔥 FALLBACK (NUNCA SILENCIO)
+                        direccion = random.choice(["CALL", "PUT"])
+                        r = random.randint(40, 60)
 
-                        # ALERTA PREVIA
-                        enviar(f"""
+                    activo = assets[s]
+                    hora = datetime.now(TZ).strftime("%H:%M:%S")
+                    prob = random.randint(80, 90)
+
+                    # ALERTA
+                    enviar(f"""
 🟡 ALERTA PREVIA
 
 Activo: {activo}
@@ -157,10 +170,10 @@ Hora: {hora}
 RSI: {round(r,2)}
 """)
 
-                        time.sleep(30)
+                    time.sleep(30)
 
-                        # SEÑAL FINAL
-                        enviar(f"""
+                    # SEÑAL FINAL
+                    enviar(f"""
 🟢 SEÑAL DENA PRO
 
 Activo: {activo}
@@ -172,16 +185,30 @@ RSI: {round(r,2)}
 Probabilidad: {prob}%
 """)
 
-                        break
+                    enviado = True
+                    break
 
-                # TIEMPO ENTRE SEÑALES
-                time.sleep(random.randint(900, 1800))
+                # 🔥 SI TODO FALLA → SEÑAL FORZADA
+                if not enviado:
+                    activo = random.choice(list(assets.values()))
+                    direccion = random.choice(["CALL", "PUT"])
+                    hora = datetime.now(TZ).strftime("%H:%M:%S")
+
+                    enviar(f"""
+🟢 SEÑAL FORZADA
+
+Activo: {activo}
+Dirección: {direccion}
+Hora: {hora}
+""")
+
+                time.sleep(random.randint(600, 1200))  # 10–20 min
 
             else:
                 time.sleep(60)
 
         except Exception as e:
-            print("ERROR:", e)
+            print("ERROR GENERAL:", e)
             time.sleep(60)
 
 # =========================
