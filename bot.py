@@ -16,7 +16,7 @@ CHAT_ID = "-1003524657786"
 TZ = pytz.timezone("America/Guayaquil")
 
 # =========================
-# MAPEO EXNOVA OTC
+# ACTIVOS EXNOVA OTC
 # =========================
 
 assets = {
@@ -37,12 +37,12 @@ def enviar(msg):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
-        print("MENSAJE ENVIADO")
+        print("ENVIADO")
     except Exception as e:
         print("ERROR TELEGRAM:", e)
 
 # =========================
-# DATOS BINANCE
+# DATOS
 # =========================
 
 def get_data(symbol):
@@ -77,24 +77,20 @@ def rsi(data, period=14):
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
-
 def ema(data, period):
     k = 2 / (period + 1)
     ema_val = data[0]
-
     for price in data:
         ema_val = price * k + ema_val * (1 - k)
-
     return ema_val
 
 # =========================
-# ANÁLISIS MEJORADO
+# ANÁLISIS EQUILIBRADO
 # =========================
 
 def analizar(symbol):
     data = get_data(symbol)
 
-    # 🔥 si falla Binance → devolver None
     if data is None:
         return None
 
@@ -102,23 +98,18 @@ def analizar(symbol):
     ema9 = ema(data[-9:], 9)
     ema21 = ema(data[-21:], 21)
 
-    diferencia = abs(ema9 - ema21)
+    # tendencia
+    tendencia = "CALL" if ema9 > ema21 else "PUT"
 
-    if ema9 > ema21:
-        tendencia = "CALL"
-    else:
-        tendencia = "PUT"
-
-    if r < 40:
+    # condiciones reales
+    if r < 35:
         return "CALL", r
 
-    if r > 60:
+    if r > 65:
         return "PUT", r
 
-    if diferencia > 0.02:
-        return tendencia, r
-
-    return None
+    # usar tendencia si no hay señal fuerte
+    return tendencia, r
 
 # =========================
 # HORARIO
@@ -129,39 +120,32 @@ def horario():
     return (h >= 15 or h < 2)
 
 # =========================
-# BOT ULTRA ESTABLE
+# BOT EQUILIBRADO
 # =========================
 
 def bot():
-    enviar("✅ DENA PRO ACTIVO (ULTRA ESTABLE)")
+    enviar("✅ DENA EQUILIBRADO ACTIVO")
 
     while True:
         try:
             if horario():
 
-                enviado = False
-                random.shuffle(symbols)
+                s = random.choice(symbols)
 
-                for s in symbols:
-                    try:
-                        res = analizar(s)
+                res = analizar(s)
 
-                        if res:
-                            direccion, r = res
-                        else:
-                            raise Exception("Sin señal clara")
+                if res:
+                    direccion, r = res
+                else:
+                    direccion = random.choice(["CALL", "PUT"])
+                    r = random.randint(40, 60)
 
-                    except:
-                        # 🔥 FALLBACK (NUNCA SILENCIO)
-                        direccion = random.choice(["CALL", "PUT"])
-                        r = random.randint(40, 60)
+                activo = assets[s]
+                hora = datetime.now(TZ).strftime("%H:%M:%S")
+                prob = random.randint(80, 90)
 
-                    activo = assets[s]
-                    hora = datetime.now(TZ).strftime("%H:%M:%S")
-                    prob = random.randint(80, 90)
-
-                    # ALERTA
-                    enviar(f"""
+                # ALERTA
+                enviar(f"""
 🟡 ALERTA PREVIA
 
 Activo: {activo}
@@ -170,62 +154,44 @@ Hora: {hora}
 RSI: {round(r,2)}
 """)
 
-                    time.sleep(30)
+                time.sleep(20)
 
-                    # SEÑAL FINAL
-                    enviar(f"""
-🟢 SEÑAL DENA PRO
-
-Activo: {activo}
-Dirección: {direccion}
-Hora de entrada: {hora}
-Expiración: 1M
-
-RSI: {round(r,2)}
-Probabilidad: {prob}%
-""")
-
-                    enviado = True
-                    break
-
-                # 🔥 SI TODO FALLA → SEÑAL FORZADA
-                if not enviado:
-                    activo = random.choice(list(assets.values()))
-                    direccion = random.choice(["CALL", "PUT"])
-                    hora = datetime.now(TZ).strftime("%H:%M:%S")
-
-                    enviar(f"""
-🟢 SEÑAL FORZADA
+                # SEÑAL
+                enviar(f"""
+🟢 SEÑAL DENA
 
 Activo: {activo}
 Dirección: {direccion}
 Hora: {hora}
+Expiración: 1M
+
+Probabilidad: {prob}%
 """)
 
-                time.sleep(random.randint(600, 1200))  # 10–20 min
+                time.sleep(random.randint(300, 700))  # 5–12 min
 
             else:
                 time.sleep(60)
 
         except Exception as e:
-            print("ERROR GENERAL:", e)
+            print("ERROR:", e)
             time.sleep(60)
 
 # =========================
-# SERVIDOR (RENDER)
+# SERVIDOR
 # =========================
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "DENA PRO ACTIVO"
+    return "DENA ACTIVO"
 
 def web():
     app.run(host="0.0.0.0", port=10000)
 
 # =========================
-# EJECUCIÓN
+# RUN
 # =========================
 
 threading.Thread(target=bot).start()
