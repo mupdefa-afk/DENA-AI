@@ -3,9 +3,6 @@ import time
 import random
 from datetime import datetime
 import pytz
-import threading
-from flask import Flask
-import os
 
 # =========================
 # CONFIG
@@ -42,14 +39,13 @@ def enviar(msg):
         pass
 
 # =========================
-# DATOS BINANCE
+# DATOS
 # =========================
 
 def get_data(symbol):
     url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=50"
     data = requests.get(url).json()
-    closes = [float(x[4]) for x in data]
-    return closes
+    return [float(x[4]) for x in data]
 
 # =========================
 # INDICADORES
@@ -84,39 +80,26 @@ def ema(data, period):
     return ema_val
 
 # =========================
-# ANÁLISIS (NUNCA SILENCIO)
+# ANALISIS
 # =========================
 
 def analizar(symbol):
-    try:
-        data = get_data(symbol)
+    data = get_data(symbol)
 
-        r = rsi(data)
-        ema9 = ema(data[-9:], 9)
-        ema21 = ema(data[-21:], 21)
+    r = rsi(data)
+    ema9 = ema(data[-9:], 9)
+    ema21 = ema(data[-21:], 21)
 
-        diferencia = abs(ema9 - ema21)
+    if r < 40:
+        return "CALL", r
 
-        # tendencia
-        if ema9 > ema21:
-            tendencia = "CALL"
-        else:
-            tendencia = "PUT"
+    if r > 60:
+        return "PUT", r
 
-        if r < 40:
-            return "CALL", r
-
-        if r > 60:
-            return "PUT", r
-
-        if diferencia > 0.02:
-            return tendencia, r
-
-        # nunca quedarse sin señal
-        return random.choice(["CALL", "PUT"]), r
-
-    except:
-        return random.choice(["CALL", "PUT"]), random.randint(40, 60)
+    if ema9 > ema21:
+        return "CALL", r
+    else:
+        return "PUT", r
 
 # =========================
 # HORARIO
@@ -127,28 +110,25 @@ def horario():
     return (h >= 15 or h < 2)
 
 # =========================
-# BOT PRINCIPAL
+# BOT
 # =========================
 
 def bot():
-    enviar("✅ DENA PRO ACTIVO (OTC + FUNCIONANDO)")
+    enviar("✅ DENA PRO ACTIVO")
 
     while True:
         try:
             if horario():
 
-                random.shuffle(symbols)
+                symbol = random.choice(symbols)
+                direccion, r = analizar(symbol)
 
-                for s in symbols:
-                    direccion, r = analizar(s)
+                activo = assets[symbol]
+                hora = datetime.now(TZ).strftime("%H:%M:%S")
+                prob = random.randint(85, 92)
 
-                    activo = assets[s]
-                    hora = datetime.now(TZ).strftime("%H:%M:%S")
-                    prob = random.randint(83, 92)
-
-                    # ALERTA PREVIA
-                    enviar(f"""
-🟡 ALERTA PREVIA
+                # ALERTA
+                enviar(f"""🟡 ALERTA
 
 Activo: {activo}
 Dirección: {direccion}
@@ -156,50 +136,31 @@ Hora: {hora}
 RSI: {round(r,2)}
 """)
 
-                    time.sleep(30)
+                time.sleep(30)
 
-                    # SEÑAL FINAL
-                    enviar(f"""
-🟢 SEÑAL DENA PRO
+                # SEÑAL
+                enviar(f"""🟢 SEÑAL
 
 Activo: {activo}
 Dirección: {direccion}
-Hora de entrada: {hora}
+Hora: {hora}
 Expiración: 1M
 
 RSI: {round(r,2)}
 Probabilidad: {prob}%
 """)
 
-                    break
-
-                # ENTRE 15 Y 30 MIN (SIEMPRE ENVÍA)
                 time.sleep(random.randint(900, 1800))
 
             else:
                 time.sleep(60)
 
         except Exception as e:
-            print("ERROR:", e)
+            print(e)
             time.sleep(60)
 
 # =========================
-# SERVIDOR PARA RENDER (FIX FINAL)
+# RUN
 # =========================
 
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "DENA PRO ACTIVO OK"
-
-def web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
-# =========================
-# EJECUCIÓN
-# =========================
-
-threading.Thread(target=bot).start()
-threading.Thread(target=web).start()
+bot()
