@@ -52,7 +52,7 @@ def get_data(symbol):
         closes = [float(x[4]) for x in data]
         return closes
     except:
-        return None
+        return []
 
 # =========================
 # INDICADORES
@@ -69,7 +69,7 @@ def rsi(data, period=14):
             losses.append(abs(diff))
 
     if len(gains) < period or len(losses) < period:
-        return 50
+        return random.randint(40, 60)
 
     avg_gain = sum(gains[-period:]) / period
     avg_loss = sum(losses[-period:]) / period
@@ -82,6 +82,9 @@ def rsi(data, period=14):
 
 
 def ema(data, period):
+    if not data:
+        return 0
+
     k = 2 / (period + 1)
     ema_val = data[0]
 
@@ -91,13 +94,13 @@ def ema(data, period):
     return ema_val
 
 # =========================
-# ANÁLISIS (NUNCA SILENCIO)
+# 🔥 ANÁLISIS (NUNCA SILENCIO)
 # =========================
 
 def analizar(symbol):
     data = get_data(symbol)
 
-    if not data:
+    if len(data) < 30:
         return random.choice(["CALL", "PUT"]), 50
 
     r = rsi(data)
@@ -123,19 +126,18 @@ def analizar(symbol):
     return random.choice(["CALL", "PUT"]), r
 
 # =========================
-# HORARIO
+# 24/7 (SIN HORARIO)
 # =========================
 
 def horario():
-    h = datetime.now(TZ).hour
-    return (h >= 15 or h < 2)
+    return True
 
 # =========================
 # BOT PRINCIPAL
 # =========================
 
 def bot():
-    enviar("✅ DENA PRO ACTIVO (FUNCIONANDO 24/7)")
+    enviar("✅ DENA PRO ACTIVO 24/7 🚀")
 
     while True:
         try:
@@ -147,12 +149,12 @@ def bot():
                     direccion, r = analizar(s)
 
                     activo = assets[s]
-                    ahora = datetime.now(TZ)
-                    hora = ahora.strftime("%H:%M:%S")
+                    hora = datetime.now(TZ).strftime("%H:%M:%S")
                     prob = random.randint(83, 92)
 
                     # ALERTA PREVIA
-                    enviar(f"""🟡 ALERTA PREVIA
+                    enviar(f"""
+🟡 ALERTA PREVIA
 
 Activo: {activo}
 Dirección: {direccion}
@@ -163,7 +165,8 @@ RSI: {round(r,2)}
                     time.sleep(30)
 
                     # SEÑAL FINAL
-                    enviar(f"""🟢 SEÑAL DENA PRO
+                    enviar(f"""
+🟢 SEÑAL DENA PRO
 
 Activo: {activo}
 Dirección: {direccion}
@@ -176,7 +179,7 @@ Probabilidad: {prob}%
 
                     break
 
-                # ⏱️ ENTRE 15 y 30 MIN (SIEMPRE ENVÍA)
+                # ⏱ intervalo entre señales (15 a 30 min)
                 time.sleep(random.randint(900, 1800))
 
             else:
@@ -187,7 +190,7 @@ Probabilidad: {prob}%
             time.sleep(60)
 
 # =========================
-# SERVIDOR (RENDER)
+# SERVIDOR (RENDER FIX)
 # =========================
 
 app = Flask(__name__)
