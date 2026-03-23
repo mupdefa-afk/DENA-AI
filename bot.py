@@ -4,7 +4,6 @@ import random
 from datetime import datetime
 import pytz
 
-# CONFIG
 TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
 CHAT_ID = "-1003524657786"
 
@@ -19,7 +18,6 @@ assets = {
 
 symbols = list(assets.keys())
 
-# TELEGRAM
 def enviar(msg):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -27,7 +25,6 @@ def enviar(msg):
     except:
         print("Error Telegram")
 
-# DATOS
 def get_data(symbol):
     try:
         url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=50"
@@ -36,7 +33,6 @@ def get_data(symbol):
     except:
         return None
 
-# RSI
 def rsi(data, period=14):
     gains, losses = [], []
 
@@ -59,7 +55,6 @@ def rsi(data, period=14):
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
-# EMA
 def ema(data, period):
     k = 2 / (period + 1)
     ema_val = data[0]
@@ -69,7 +64,7 @@ def ema(data, period):
 
     return ema_val
 
-# ANALISIS MEJORADO
+# 🔥 ANÁLISIS SOLO SEÑALES FUERTES
 def analizar(symbol):
     data = get_data(symbol)
 
@@ -80,32 +75,31 @@ def analizar(symbol):
     ema9 = ema(data[-9:], 9)
     ema21 = ema(data[-21:], 21)
 
-    # FILTRO FUERTE (evita malas señales)
+    # SOLO señales fuertes
     if r < 35 and ema9 > ema21:
         return "CALL", r
 
     if r > 65 and ema9 < ema21:
         return "PUT", r
 
-    # SI NO HAY CONDICIÓN FUERTE → NO OPERA
     return None
 
-# HORARIO
 def horario():
     h = datetime.now(TZ).hour
     return (h >= 15 or h < 2)
 
-# BOT
+# 🔥 BOT SIN SEÑALES BASURA
 def bot():
-    enviar("✅ DENA PRO ACTIVO (FILTRO REAL)")
+    enviar("✅ DENA PRO ACTIVO (SOLO SEÑALES REALES)")
 
     while True:
         try:
             if horario():
 
-                enviado = False
+                encontrada = False
 
-                for _ in range(5):  # intenta hasta 5 activos
+                # intenta hasta encontrar señal REAL
+                for _ in range(10):
                     s = random.choice(symbols)
                     res = analizar(s)
 
@@ -115,7 +109,6 @@ def bot():
                         hora = datetime.now(TZ).strftime("%H:%M:%S")
                         prob = random.randint(85, 92)
 
-                        # ALERTA
                         enviar(f"""
 🟡 ALERTA PREVIA
 
@@ -127,7 +120,6 @@ RSI: {round(r,2)}
 
                         time.sleep(30)
 
-                        # SEÑAL
                         enviar(f"""
 🟢 SEÑAL DENA PRO
 
@@ -140,24 +132,13 @@ RSI: {round(r,2)}
 Probabilidad: {prob}%
 """)
 
-                        enviado = True
+                        encontrada = True
                         break
 
-                # 🔥 SI NO ENCUENTRA SEÑAL → IGUAL ENVÍA (para no quedarse en silencio)
-                if not enviado:
-                    s = random.choice(symbols)
-                    direccion = random.choice(["CALL", "PUT"])
-                    activo = assets[s]
-                    hora = datetime.now(TZ).strftime("%H:%M:%S")
-
-                    enviar(f"""
-🟠 SEÑAL SUAVE
-
-Activo: {activo}
-Dirección: {direccion}
-Hora: {hora}
-(No cumple todos los filtros)
-""")
+                # ⏱ si no encuentra → espera y vuelve a intentar (NO manda basura)
+                if not encontrada:
+                    time.sleep(120)
+                    continue
 
                 time.sleep(random.randint(300, 600))
 
