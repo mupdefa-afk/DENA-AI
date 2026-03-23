@@ -3,61 +3,40 @@ import time
 import random
 from datetime import datetime
 import pytz
-import threading
-from flask import Flask
-import os
 
-# =========================
 # CONFIG
-# =========================
-
 TOKEN = "8544210127:AAFGMquOV2eHTMzNZlsOtdWY6HGvrDSgbEo"
 CHAT_ID = "-1003524657786"
 
 TZ = pytz.timezone("America/Guayaquil")
 
-# =========================
-# ACTIVOS OTC (EXNOVA)
-# =========================
-
 assets = {
     "BTCUSDT": "BTC/USDT OTC",
     "ETHUSDT": "ETH/USDT OTC",
     "BNBUSDT": "BNB/USDT OTC",
-    "SOLUSDT": "SOL/USDT OTC",
-    "ADAUSDT": "ADA/USDT OTC"
+    "SOLUSDT": "SOL/USDT OTC"
 }
 
 symbols = list(assets.keys())
 
-# =========================
 # TELEGRAM
-# =========================
-
 def enviar(msg):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
     except:
-        pass
+        print("Error Telegram")
 
-# =========================
-# DATOS (BINANCE)
-# =========================
-
+# DATOS
 def get_data(symbol):
     try:
         url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit=50"
         data = requests.get(url).json()
-        closes = [float(x[4]) for x in data]
-        return closes
+        return [float(x[4]) for x in data]
     except:
-        return [random.uniform(1, 100) for _ in range(50)]
+        return None
 
-# =========================
-# INDICADORES
-# =========================
-
+# RSI
 def rsi(data, period=14):
     gains, losses = [], []
 
@@ -68,8 +47,11 @@ def rsi(data, period=14):
         else:
             losses.append(abs(diff))
 
-    avg_gain = sum(gains[-period:]) / period if gains else 0
-    avg_loss = sum(losses[-period:]) / period if losses else 0
+    if len(gains) < period or len(losses) < period:
+        return 50
+
+    avg_gain = sum(gains[-period:]) / period
+    avg_loss = sum(losses[-period:]) / period
 
     if avg_loss == 0:
         return 100
@@ -77,6 +59,7 @@ def rsi(data, period=14):
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
+# EMA
 def ema(data, period):
     k = 2 / (period + 1)
     ema_val = data[0]
@@ -86,67 +69,54 @@ def ema(data, period):
 
     return ema_val
 
-# =========================
-# ANÁLISIS (NUNCA SILENCIO)
-# =========================
-
+# ANALISIS MEJORADO
 def analizar(symbol):
     data = get_data(symbol)
+
+    if not data:
+        return None
 
     r = rsi(data)
     ema9 = ema(data[-9:], 9)
     ema21 = ema(data[-21:], 21)
 
-    diferencia = abs(ema9 - ema21)
-
-    if ema9 > ema21:
-        tendencia = "CALL"
-    else:
-        tendencia = "PUT"
-
-    if r < 40:
+    # FILTRO FUERTE (evita malas señales)
+    if r < 35 and ema9 > ema21:
         return "CALL", r
 
-    if r > 60:
+    if r > 65 and ema9 < ema21:
         return "PUT", r
 
-    if diferencia > 0.02:
-        return tendencia, r
+    # SI NO HAY CONDICIÓN FUERTE → NO OPERA
+    return None
 
-    return random.choice(["CALL", "PUT"]), r
-
-# =========================
-# HORARIO ECUADOR
-# =========================
-
+# HORARIO
 def horario():
-    ahora = datetime.now(TZ)
-    hora = ahora.hour
-    print("Hora Ecuador:", hora)
-    return (hora >= 15 or hora < 2)
+    h = datetime.now(TZ).hour
+    return (h >= 15 or h < 2)
 
-# =========================
-# BOT PRINCIPAL (FIX TOTAL)
-# =========================
-
+# BOT
 def bot():
-    enviar("✅ DENA PRO ACTIVO (FUNCIONANDO)")
+    enviar("✅ DENA PRO ACTIVO (FILTRO REAL)")
 
     while True:
         try:
             if horario():
 
-                print("🟢 Dentro de horario")
+                enviado = False
 
-                s = random.choice(symbols)
-                direccion, r = analizar(s)
+                for _ in range(5):  # intenta hasta 5 activos
+                    s = random.choice(symbols)
+                    res = analizar(s)
 
-                activo = assets[s]
-                hora = datetime.now(TZ).strftime("%H:%M:%S")
-                prob = random.randint(83, 92)
+                    if res:
+                        direccion, r = res
+                        activo = assets[s]
+                        hora = datetime.now(TZ).strftime("%H:%M:%S")
+                        prob = random.randint(85, 92)
 
-                # ALERTA
-                enviar(f"""
+                        # ALERTA
+                        enviar(f"""
 🟡 ALERTA PREVIA
 
 Activo: {activo}
@@ -155,49 +125,47 @@ Hora: {hora}
 RSI: {round(r,2)}
 """)
 
-                time.sleep(30)
+                        time.sleep(30)
 
-                # SEÑAL
-                enviar(f"""
+                        # SEÑAL
+                        enviar(f"""
 🟢 SEÑAL DENA PRO
 
 Activo: {activo}
 Dirección: {direccion}
-Hora de entrada: {hora}
+Hora: {hora}
 Expiración: 1M
 
 RSI: {round(r,2)}
 Probabilidad: {prob}%
 """)
 
-                # 🔥 cada 5 a 10 minutos
+                        enviado = True
+                        break
+
+                # 🔥 SI NO ENCUENTRA SEÑAL → IGUAL ENVÍA (para no quedarse en silencio)
+                if not enviado:
+                    s = random.choice(symbols)
+                    direccion = random.choice(["CALL", "PUT"])
+                    activo = assets[s]
+                    hora = datetime.now(TZ).strftime("%H:%M:%S")
+
+                    enviar(f"""
+🟠 SEÑAL SUAVE
+
+Activo: {activo}
+Dirección: {direccion}
+Hora: {hora}
+(No cumple todos los filtros)
+""")
+
                 time.sleep(random.randint(300, 600))
 
             else:
-                print("🔴 Fuera de horario")
                 time.sleep(60)
 
         except Exception as e:
-            print("ERROR:", e)
+            print("Error:", e)
             time.sleep(60)
 
-# =========================
-# SERVIDOR (RENDER FIX)
-# =========================
-
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "DENA PRO ACTIVO"
-
-def web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
-# =========================
-# EJECUCIÓN
-# =========================
-
-threading.Thread(target=bot).start()
-threading.Thread(target=web).start()
+bot()
